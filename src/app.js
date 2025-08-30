@@ -1,6 +1,10 @@
 const express = require("express");
 const connectDB = require("./config/database");
-const User = require("./models/user")
+const User = require("./models/user");
+const {validateSignUpData} = require("./utils/validate");
+const bcrypt = require("bcrypt");
+const cookieParser = require('cookie-parser');
+
 
 const app = express();
 
@@ -10,13 +14,26 @@ const app = express();
 // app.use("/test", () => {})
 
 app.use(express.json());
+// to read a cookie you need to parse the cookie
+app.use(cookieParser());
 
 app.post("/signup", async (req, res) => {
     //creating a new instance of user model
-    const user = new User(req.body);
 
     // data is saved in db
     try {
+        //validate the data
+        validateSignUpData(req);
+
+        const {password} = req.body
+
+        //encrypt the data
+        const passwordHash = await bcrypt.hash(password, 10)
+
+        const user = new User({
+            firstName, lastName, emaiIld, password: passwordHash
+        });
+
         await user.save();
         res.status(200).send("user added successfuly")
     } catch (error) {
@@ -24,35 +41,38 @@ app.post("/signup", async (req, res) => {
     }
 })
 
-// get user by email
-
-app.get("/user", async (req, res) => {
-    const email = req.body.emailId;
-
+app.post("/login", async(req, res) => {
     try {
-        const user = await User.findOne({emailId: email});
-        if (!user) {
-            res.status(404).send("User not found");
+        const {emailId, password} =  req.body;
+        const user = await User.findOne({emailId});
+        if(!user) {
+            throw new Error("Invalid credentials");
         }
-        res.status(200).json(user);
+        const isPasswordValid =  await user.verifyPassword(password);
+        if(isPasswordValid) {
+            const token = await user.getJwt();
+            res.cookie("token", token);
+            res.send("Login successfully")
+        } else {
+            throw new Error("Invalid credentials")
+        }
+
     } catch (error) {
-        res.status(500).send("Failed to fetch user", error)
+        res.send(400).send("ERROR: ", error.message);
+    }
+
+})
+
+app.get("/profile", userAuth, async (req, res) => {
+    try {
+        res.send("User profile is ", req.user)
+    } catch (error) {
+        res.status(500).send("Failed to fetch user profile");
     }
 })
 
-// feed api - get all the userrs from db
-app.get("/feed", async (req, res) => {
+app.post("/semdC")
 
-    try {
-        const users = await User.find({});
-        if (users.length == 0) {
-            res.status(404).send("Users not found");
-        }
-        res.status(200).json(users);
-    } catch (error) {
-        res.status(500).send("Failed to fetch users", error)
-    }
-})
 
 connectDB()
  .then( () => 
